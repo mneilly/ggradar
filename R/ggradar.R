@@ -4,7 +4,17 @@
 #'
 #' @export
 # most of the code is from http://rstudio-pubs-static.s3.amazonaws.com/5795_e6e6411731bb4f1b9cc7eb49499c2082.html
-
+args <- commandArgs(trailingOnly=FALSE)
+script.dir <- getSrcDirectory(function(x) {x})
+sourced <- TRUE
+if (length(script.dir) < 1) {
+  sourced <- FALSE
+  script.dir <- dirname(substring(args[grep("--file=", args)], 8))
+}
+support <- c("prefix.R")
+for (f in support) {
+  source(paste(script.dir, f, sep="/"))
+}
 
 ggradar <- function(plot.data,
                              font.radar="Circular Air Light",
@@ -37,8 +47,13 @@ ggradar <- function(plot.data,
                              background.circle.transparency=0.2,
                              plot.legend=if (nrow(plot.data)>1) TRUE else FALSE,
                              legend.title="",
-                             legend.text.size=grid.label.size ) {
-
+                             legend.text.size=grid.label.size,
+                             prefix.forcenum=TRUE,
+                             prefix.units="",
+                             prefix.func=NULL,
+                             path.close=TRUE,
+                             sort.decreasing=FALSE,
+                             sort.numeric=FALSE) {
   library(ggplot2)
 
   plot.data <- as.data.frame(plot.data)
@@ -89,13 +104,17 @@ CalculateGroupPath <- function(df) {
                                             x=pathData[,j]*sin(angles[j-1]),
                                             y=pathData[,j]*cos(angles[j-1])))
     }
+    if (path.close) {
     ##complete the path by repeating first pair of coords in the path
     graphData=rbind(graphData, data.frame(group=i, 
                                           x=pathData[,2]*sin(angles[1]),
                                           y=pathData[,2]*cos(angles[1])))
+    }
   }
   #Make sure that name of first column matches that of input data (in case !="group")
   colnames(graphData)[1] <- colnames(df)[1]
+  if (sort.numeric)
+      graphData$group <- factor(graphData$group, levels=sort(as.numeric(levels(graphData$group)), decreasing=sort.decreasing))
   graphData #data frame returned by function
 }
 CaclulateAxisPath = function(var.names,min,max) {
@@ -153,10 +172,9 @@ funcCircleCoords <- function(center = c(0,0), r = 1, npoints = 100){
   # (d) Create file containing axis labels + associated plotting coordinates
   #Labels
   axis$label <- data.frame(
-    text=axis.labels,
+    text=ifelse(rep(is.null(prefix.func),length(axis.labels)), axis.labels, prefix.func(axis.labels,units=prefix.units,forcenum=prefix.forcenum)),
     x=NA,
-    y=NA )
-  #print(axis$label)
+      y=NA )
   #axis label coordinates
   n.vars <- length(var.names)
   angles = seq(from=0, to=2*pi, by=(2*pi)/n.vars)
@@ -232,10 +250,17 @@ base <- ggplot(axis$label) + xlab(NULL) + ylab(NULL) + coord_equal() +
 
 
   # ... + group (cluster) 'paths'
+  if (sort.numeric)
+  base <- base + geom_path(data=group$path,aes(x=x,y=y,group=group,colour=reorder(prefix.func(group,units=prefix.units,forcenum=prefix.forcenum),as.numeric(group))),
+                           size=group.line.width)
+  else
   base <- base + geom_path(data=group$path,aes(x=x,y=y,group=group,colour=group),
                            size=group.line.width)
 
   # ... + group points (cluster data)
+  if (sort.numeric)
+  base <- base + geom_point(data=group$path,aes(x=x,y=y,group=group,colour=reorder(prefix.func(group,units=prefix.units,forcenum=prefix.forcenum),as.numeric(group))),size=group.point.size)
+  else
   base <- base + geom_point(data=group$path,aes(x=x,y=y,group=group,colour=group),size=group.point.size)
 
 
